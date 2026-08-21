@@ -14,7 +14,7 @@ This is the most senior-signal artifact of the 12-week master plan. If the week 
 
 ---
 
-## What is done (Day 1)
+## What is done
 
 | Item | Status |
 |---|---|
@@ -24,13 +24,11 @@ This is the most senior-signal artifact of the 12-week master plan. If the week 
 | LMP verification (dual = marginal generator cost) | Done — 24/24 hours pass |
 | Walkthrough notebook with plots | Done |
 | README with LP/MILP mental model and dispatch framing | Done |
-| Git push to remote | Done (`7968a79`) |
-
-### Key commit
-
-```
-7968a79 Day 1: scaffold repo and economic dispatch LP toy with LMP duals
-```
+| Battery arbitrage LP (`src/dispatch/battery_arbitrage.py`) | Done |
+| OPSD DE-LU day-ahead price loader | Done |
+| LightGBM point forecaster (lags + calendar) | Done |
+| Regret harness + `python -m src.eval` CLI | Done |
+| Synthetic-price sanity tests (`tests/test_battery_arbitrage.py`) | Done |
 
 ---
 
@@ -43,13 +41,24 @@ battery-spo-rl/
 ├── requirements.txt
 ├── LICENSE
 ├── .gitignore
+├── data/                    ← cached OPSD CSV (gitignored)
 ├── notebooks/
 │   └── 01_economic_dispatch_toy.ipynb
 ├── src/
-│   └── dispatch/
-│       ├── __init__.py
-│       ├── __main__.py      ← CLI entry: python -m src.dispatch
-│       └── economic_dispatch.py
+│   ├── dispatch/
+│   │   ├── __init__.py
+│   │   ├── __main__.py      ← CLI entry: python -m src.dispatch
+│   │   ├── economic_dispatch.py
+│   │   └── battery_arbitrage.py
+│   ├── data/
+│   │   └── opsd_prices.py
+│   ├── forecast/
+│   │   └── price_forecaster.py
+│   └── eval/
+│       ├── regret_backtest.py
+│       └── __main__.py      ← CLI entry: python -m src.eval
+├── tests/
+│   └── test_battery_arbitrage.py
 └── results/                 ← generated outputs (gitignored except .gitkeep)
     └── .gitkeep
 ```
@@ -64,32 +73,42 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# CLI — prints LMP summary, saves dispatch CSV
+# Day 1 — economic dispatch
 python -m src.dispatch
+
+# Day 2 — 90-day regret backtest
+python -m src.eval --days 90
+
+# Sanity tests
+pytest tests/test_battery_arbitrage.py -q
 
 # Notebook walkthrough
 jupyter notebook notebooks/01_economic_dispatch_toy.ipynb
 ```
 
-Expected CLI output:
+Expected Day 2 output (values vary with OPSD window):
 
 ```
-Status: optimal
-Total cost: $66,827.90
-LMP verification: 24/24 hours match marginal cost
-Saved dispatch to results\dispatch_day1.csv
+OPSD DE-LU day-ahead prices available from YYYY-MM-DD to YYYY-MM-DD.
+Evaluation days: 90 (YYYY-MM-DD to YYYY-MM-DD)
+Perfect foresight total revenue: EUR ...
+Point forecast total revenue:    EUR ...
+Total cumulative regret:         EUR ...
+Average daily regret:            EUR ...
+Saved results to results\regret.csv
 ```
 
 Generated artifacts (local, not committed):
 
 - `results/dispatch_day1.csv`
-- `results/economic_dispatch_lmp.png`
+- `results/regret.csv`
+- `data/opsd/time_series_60min_singleindex.csv`
 
 ---
 
 ## Core module API
 
-**File:** `src/dispatch/economic_dispatch.py`
+### Economic dispatch — `src/dispatch/economic_dispatch.py`
 
 | Symbol | Purpose |
 |---|---|
@@ -100,6 +119,41 @@ Generated artifacts (local, not committed):
 | `solve_economic_dispatch()` | cvxpy LP solver; returns dispatch + LMPs |
 | `verify_lmps()` | Assert duals match marginal generator cost |
 | `marginal_generator_cost()` | Expected LMP from dispatch (for verification) |
+
+### Battery arbitrage — `src/dispatch/battery_arbitrage.py`
+
+| Symbol | Purpose |
+|---|---|
+| `BatteryConfig` | Dataclass: power, energy, efficiency, SOC bounds |
+| `ArbitrageResult` | schedule DataFrame, revenue, status |
+| `solve_battery_arbitrage()` | cvxpy LP; maximize price × (discharge − charge) |
+| `realized_revenue()` | Execute fixed schedule against actual prices |
+
+Default battery: 100 MW / 400 MWh, 90% round-trip efficiency, 50% initial SOC, terminal SOC ≥ initial.
+
+### Price data — `src/data/opsd_prices.py`
+
+| Symbol | Purpose |
+|---|---|
+| `load_de_day_ahead()` | DE-LU day-ahead prices (Europe/Berlin), date slice |
+| `extract_day_prices()` | 24 hourly prices for one calendar day |
+| `available_day_range()` | First/last complete days in OPSD cache |
+
+OPSD time series frozen at 2020-10-06; backtest uses last N complete days in that dataset.
+
+### Forecaster — `src/forecast/price_forecaster.py`
+
+| Symbol | Purpose |
+|---|---|
+| `PriceForecaster` | 24 LightGBM models (one per hour-of-day) |
+| `build_feature_matrix()` | Lags (1,2,3,24,48,168) + calendar features |
+
+### Regret harness — `src/eval/regret_backtest.py`
+
+| Symbol | Purpose |
+|---|---|
+| `run_regret_backtest()` | Rolling day-by-day perfect foresight vs forecast LP |
+| `python -m src.eval` | CLI: `--days`, `--start`, `--output`, battery overrides |
 
 Default generators:
 
@@ -137,7 +191,7 @@ At each hour, the LMP equals the marginal cost of the **most expensive generator
 
 | Day | Topic | Priority if slipping |
 |---|---|---|
-| Day 2+ | Battery storage arbitrage LP (perfect foresight vs point forecast) | Keep |
+| Day 2 | Battery storage arbitrage LP + regret harness | Done |
 | Mid-week | RL agent (Stable-Baselines3 / Gymnasium) on battery arbitrage | **Drop first** |
 | Core | SPO-trained vs MAE-trained forecaster feeding the LP | **Never drop** |
 | Thursday | pandapower AC OPF on IEEE 14-bus | Keep |
@@ -158,22 +212,18 @@ Cross-cutting threads all week:
 Already in `requirements.txt` for later days:
 
 - `cvxpy`, `pandas`, `matplotlib`, `numpy` — Day 1 (in use)
+- `lightgbm`, `scikit-learn`, `pytest` — Day 2 (in use)
 - `stable-baselines3`, `gymnasium` — RL (mid-week)
 - `pandapower` — AC OPF (Thursday)
 - `jupyter` — notebooks
 
 ---
 
-## Suggested next step (Day 2)
+## Suggested next step (mid-week)
 
-Add battery storage to the LP:
-
-1. New module: `src/dispatch/battery_arbitrage.py`
-2. Decision vars: charge/discharge rate, state of charge
-3. Two baselines: perfect foresight LP and LP with point forecast
-4. Metric: regret in \$ vs perfect foresight over a rolling backtest
-
-Reuse `economic_dispatch.py` patterns (cvxpy formulation, dual extraction, `DispatchResult`-style output).
+1. RL agent on battery arbitrage (Gymnasium env wrapping `solve_battery_arbitrage` or heuristic dispatch)
+2. SPO-trained vs MAE-trained forecaster feeding the same LP
+3. Extend `results/regret.csv` with RL and SPO rows for capstone comparison
 
 ---
 

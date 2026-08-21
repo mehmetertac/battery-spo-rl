@@ -50,12 +50,56 @@ python -m src.dispatch
 jupyter notebook notebooks/01_economic_dispatch_toy.ipynb
 ```
 
+## Day 2: battery arbitrage + regret harness
+
+Day-ahead battery arbitrage LP with two approaches:
+
+1. **Perfect foresight** — oracle upper bound (regret = 0). Uses actual day-ahead prices in the LP.
+2. **Point forecast** — LightGBM lag/calendar forecaster feeds the same LP; schedule is executed against actual prices.
+
+Perfect foresight revenue minus forecast revenue is **regret in EUR** — the headline decision-quality metric.
+
+### Run backtest
+
+```powershell
+# 90-day rolling backtest (uses last 90 complete days in OPSD cache)
+python -m src.eval --days 90
+
+# Custom window (OPSD frozen at 2020-10-06; data ends ~2020-09-30)
+python -m src.eval --days 60 --start 2020-07-01 --output results/regret.csv
+```
+
+First run downloads OPSD DE-LU day-ahead prices (~120 MB) to `data/opsd/`.
+
+### Output: `results/regret.csv`
+
+| Column | Description |
+|---|---|
+| `date` | Evaluation day (Europe/Berlin) |
+| `approach` | `perfect_foresight` or `point_forecast` |
+| `pf_revenue` | Perfect foresight revenue (EUR) |
+| `approach_revenue` | Revenue for this approach (EUR) |
+| `regret` | `pf_revenue - approach_revenue` (0 for perfect foresight) |
+| `cumulative_regret` | Running sum of daily regret (point forecast rows) |
+| `forecast_mae` | Mean absolute price forecast error (EUR/MWh) |
+
+### Sanity tests
+
+```powershell
+pytest tests/test_battery_arbitrage.py -q
+```
+
 ## Project structure
 
 ```
 battery-spo-rl/
+├── data/               # Cached OPSD price CSV (gitignored)
 ├── notebooks/          # Exploratory walkthroughs
-├── src/dispatch/       # Reusable optimization modules
+├── src/
+│   ├── dispatch/       # LP modules (economic dispatch, battery arbitrage)
+│   ├── data/           # OPSD price loader
+│   ├── forecast/       # LightGBM point forecaster
+│   └── eval/           # Regret backtest CLI
 └── results/            # Outputs (figures, CSVs)
 ```
 
