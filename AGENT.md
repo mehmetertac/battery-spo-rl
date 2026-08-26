@@ -39,6 +39,20 @@ Headline metric for this repo: **regret in EUR vs perfect foresight** — not fo
   - [handover.md](handover.md) — done/next steps, API table, artifacts
 - If you add CLI flags, modules, or outputs, document them in the relevant file above.
 
+### 2a. Update handover.md on every push (required)
+
+- **[handover.md](handover.md) must be updated before every push**, even for small changes.
+- Treat it as the live project status doc for the next person (or agent).
+- On each push, at minimum refresh:
+  - **Last updated** date at the top
+  - **What is done** table (add/mark items)
+  - **Repo layout** if files or directories changed
+  - **Core module API** if public symbols, CLI flags, or defaults changed
+  - **Suggested next step** if priorities shifted
+  - **Key commit** hash and one-line summary for the work being pushed
+- If nothing functional changed (e.g. typo-only), still bump **Last updated** and note “no functional change.”
+- Do not push without reviewing [handover.md](handover.md) — stale handover is a blocker.
+
 ### 3. Tests — always, at least minimal
 
 - **Always create at least minimal unit tests**, even for small changes.
@@ -72,7 +86,8 @@ Headline metric for this repo: **regret in EUR vs perfect foresight** — not fo
 ## Quick checklist (before push)
 
 - [ ] No file > 1,000 lines (or refactor proposed)
-- [ ] [README.md](README.md) / [handover.md](handover.md) updated if behavior or layout changed
+- [ ] [README.md](README.md) updated if behavior or layout changed
+- [ ] [handover.md](handover.md) updated (required on every push — date, status, API, key commit)
 - [ ] New/changed logic has tests in [tests/](tests/)
 - [ ] `pytest tests/ -q` passes
 - [ ] Relevant smoke command run if CLI or backtest changed

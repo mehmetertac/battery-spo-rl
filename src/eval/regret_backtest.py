@@ -1,9 +1,10 @@
-"""Rolling backtest harness: perfect foresight vs point-forecast LP regret."""
+"""Rolling backtest harness: perfect foresight vs MAE vs SPO forecast LP regret."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,20 @@ from src.dispatch.battery_arbitrage import (
     realized_revenue,
     solve_battery_arbitrage,
 )
+from src.forecast.linear_price_forecaster import LinearPriceForecaster
 from src.forecast.price_forecaster import PriceForecaster, build_feature_matrix, forecast_mae
+
+
+class DayForecaster(Protocol):
+    def fit(
+        self,
+        history: pd.DataFrame,
+        precomputed_features: pd.DataFrame | None = None,
+        precomputed_targets: pd.Series | None = None,
+        train_end: pd.Timestamp | None = None,
+    ) -> DayForecaster: ...
+
+    def predict_day(self, history: pd.DataFrame, day: pd.Timestamp) -> np.ndarray: ...
 
 
 def _complete_days(prices: pd.DataFrame) -> list[pd.Timestamp]:
@@ -49,12 +63,54 @@ def _default_eval_days(
     return eligible[-n_days:]
 
 
+def _evaluate_forecast_day(
+    day: pd.Timestamp,
+    actual: np.ndarray,
+    pf_revenue: float,
+    cumulative_regret: float,
+    approach: str,
+    forecaster: DayForecaster,
+    history: pd.DataFrame,
+    all_features: pd.DataFrame,
+    all_targets: pd.Series,
+    battery_config: BatteryConfig,
+) -> tuple[dict[str, object], float]:
+    """Fit forecaster, predict, run LP, return result row and updated cumulative regret."""
+    forecaster.fit(
+        history,
+        precomputed_features=all_features,
+        precomputed_targets=all_targets,
+        train_end=pd.Timestamp(day.date(), tz="Europe/Berlin"),
+    )
+    forecast = forecaster.predict_day(history, day)
+    mae = forecast_mae(actual, forecast)
+
+    fc_result = solve_battery_arbitrage(forecast, battery_config)
+    fc_revenue = realized_revenue(fc_result.schedule, actual)
+    regret = pf_revenue - fc_revenue
+    cumulative_regret += regret
+
+    row = {
+        "date": day.date().isoformat(),
+        "approach": approach,
+        "pf_revenue": pf_revenue,
+        "approach_revenue": fc_revenue,
+        "regret": regret,
+        "cumulative_regret": cumulative_regret,
+        "forecast_mae": mae,
+    }
+    return row, cumulative_regret
+
+
 def run_regret_backtest(
     n_days: int = 90,
     start: str | pd.Timestamp | None = None,
     output_path: str | Path = "results/regret.csv",
     battery_config: BatteryConfig | None = None,
     warmup_days: int = 7,
+    include_lightgbm: bool = False,
+    spo_epochs: int = 5,
+    spo_learning_rate: float = 0.01,
 ) -> pd.DataFrame:
     """Run day-by-day regret backtest and write results CSV."""
     if battery_config is None:
@@ -73,14 +129,15 @@ def run_regret_backtest(
             )
 
     rows: list[dict[str, object]] = []
-    cumulative_regret = 0.0
+    cumulative: dict[str, float] = {"mae_linear": 0.0, "spo_linear": 0.0, "point_forecast": 0.0}
 
-    print("Building feature matrix for forecaster...")
+    print("Building feature matrix for forecasters...")
     all_features, all_targets, _ = build_feature_matrix(prices)
 
     for day_idx, day in enumerate(eval_days, start=1):
         if day_idx == 1 or day_idx % 10 == 0 or day_idx == len(eval_days):
             print(f"Backtest day {day_idx}/{len(eval_days)}: {day.date()}", flush=True)
+
         actual = extract_day_prices(prices, day).to_numpy(dtype=float)
         pf_result = solve_battery_arbitrage(actual, battery_config)
         pf_revenue = pf_result.revenue
@@ -92,38 +149,64 @@ def run_regret_backtest(
                 "pf_revenue": pf_revenue,
                 "approach_revenue": pf_revenue,
                 "regret": 0.0,
-                "cumulative_regret": cumulative_regret,
+                "cumulative_regret": np.nan,
                 "forecast_mae": np.nan,
             }
         )
 
         day_start = pd.Timestamp(day.date(), tz="Europe/Berlin")
         history = prices.loc[prices.index < day_start]
-        forecaster = PriceForecaster().fit(
+
+        mae_forecaster = LinearPriceForecaster(objective="mae", battery_config=battery_config)
+        row, cumulative["mae_linear"] = _evaluate_forecast_day(
+            day,
+            actual,
+            pf_revenue,
+            cumulative["mae_linear"],
+            "mae_linear",
+            mae_forecaster,
             history,
-            precomputed_features=all_features,
-            precomputed_targets=all_targets,
-            train_end=day_start,
+            all_features,
+            all_targets,
+            battery_config,
         )
-        forecast = forecaster.predict_day(history, day)
-        mae = forecast_mae(actual, forecast)
+        rows.append(row)
 
-        fc_result = solve_battery_arbitrage(forecast, battery_config)
-        fc_revenue = realized_revenue(fc_result.schedule, actual)
-        regret = pf_revenue - fc_revenue
-        cumulative_regret += regret
-
-        rows.append(
-            {
-                "date": day.date().isoformat(),
-                "approach": "point_forecast",
-                "pf_revenue": pf_revenue,
-                "approach_revenue": fc_revenue,
-                "regret": regret,
-                "cumulative_regret": cumulative_regret,
-                "forecast_mae": mae,
-            }
+        spo_forecaster = LinearPriceForecaster(
+            objective="spo",
+            battery_config=battery_config,
+            spo_epochs=spo_epochs,
+            learning_rate=spo_learning_rate,
         )
+        row, cumulative["spo_linear"] = _evaluate_forecast_day(
+            day,
+            actual,
+            pf_revenue,
+            cumulative["spo_linear"],
+            "spo_linear",
+            spo_forecaster,
+            history,
+            all_features,
+            all_targets,
+            battery_config,
+        )
+        rows.append(row)
+
+        if include_lightgbm:
+            lgbm = PriceForecaster()
+            row, cumulative["point_forecast"] = _evaluate_forecast_day(
+                day,
+                actual,
+                pf_revenue,
+                cumulative["point_forecast"],
+                "point_forecast",
+                lgbm,
+                history,
+                all_features,
+                all_targets,
+                battery_config,
+            )
+            rows.append(row)
 
     results = pd.DataFrame(rows)
     output_path = Path(output_path)
@@ -131,16 +214,26 @@ def run_regret_backtest(
     results.to_csv(output_path, index=False)
 
     pf_total = float(results.loc[results["approach"] == "perfect_foresight", "pf_revenue"].sum())
-    fc_total = float(results.loc[results["approach"] == "point_forecast", "approach_revenue"].sum())
-    avg_regret = float(results.loc[results["approach"] == "point_forecast", "regret"].mean())
-
     print(f"Evaluation days: {len(eval_days)} ({eval_days[0].date()} to {eval_days[-1].date()})")
     print(f"Perfect foresight total revenue: EUR {pf_total:,.2f}")
-    print(f"Point forecast total revenue:    EUR {fc_total:,.2f}")
-    print(f"Total cumulative regret:         EUR {cumulative_regret:,.2f}")
-    print(f"Average daily regret:            EUR {avg_regret:,.2f}")
-    print(f"Saved results to {output_path}")
 
+    for approach, label in [
+        ("mae_linear", "MAE linear"),
+        ("spo_linear", "SPO linear"),
+        ("point_forecast", "LightGBM point forecast"),
+    ]:
+        subset = results.loc[results["approach"] == approach]
+        if subset.empty:
+            continue
+        total_rev = float(subset["approach_revenue"].sum())
+        total_regret = float(subset["regret"].sum())
+        avg_mae = float(subset["forecast_mae"].mean())
+        print(
+            f"{label:28s} revenue EUR {total_rev:>12,.2f}  "
+            f"cumulative regret EUR {total_regret:>12,.2f}  avg MAE {avg_mae:.2f} EUR/MWh"
+        )
+
+    print(f"Saved results to {output_path}")
     return results
 
 
@@ -173,6 +266,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default=7,
         help="Extra warmup days beyond 168h lag requirement.",
     )
+    parser.add_argument(
+        "--include-lightgbm",
+        action="store_true",
+        help="Also run legacy LightGBM point-forecast baseline.",
+    )
+    parser.add_argument(
+        "--spo-epochs",
+        type=int,
+        default=5,
+        help="SPO+ subgradient epochs per training window.",
+    )
+    parser.add_argument(
+        "--spo-lr",
+        type=float,
+        default=5.0,
+        help="SPO+ subgradient learning rate (bias-only fine-tuning from MAE init).",
+    )
     return parser
 
 
@@ -200,6 +310,9 @@ def main(argv: list[str] | None = None) -> None:
         output_path=args.output,
         battery_config=battery,
         warmup_days=args.warmup_days,
+        include_lightgbm=args.include_lightgbm,
+        spo_epochs=args.spo_epochs,
+        spo_learning_rate=args.spo_lr,
     )
 
 
