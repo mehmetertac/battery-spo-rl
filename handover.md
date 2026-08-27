@@ -1,13 +1,13 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-08-26  
-**Branch:** `main` (up to date with remote)
+**Last updated:** 2026-08-27  
+**Branch:** `main`
 
 ### Key commit
 
 ```
-SPO+ linear forecaster vs MAE baseline on battery arbitrage LP
+IEEE 14-bus AC OPF with load-forecast scenarios and hidden congestion
 ```
 
 ---
@@ -40,6 +40,11 @@ Agent workflow rules: [AGENT.md](AGENT.md) (includes mandatory handover update b
 | **Regret harness: MAE vs SPO vs perfect foresight** | Done |
 | SPO+ loss + subgradient tests (`tests/test_spo_forecaster.py`) | Done |
 | Synthetic-price sanity tests (`tests/test_battery_arbitrage.py`) | Done |
+| **IEEE 14-bus AC OPF (`src/dispatch/ieee14_opf.py`)** | Done |
+| **Load forecaster + OPF scenario harness** | Done |
+| **Hidden congestion detection (forecast vs actual load)** | Done |
+| Notebook `02_ieee14_opf_forecast_error.ipynb` | Done |
+| IEEE 14-bus tests (`tests/test_ieee14_opf.py`) | Done |
 | Agent workflow rules ([AGENT.md](AGENT.md)) | Done |
 | Test config ([pytest.ini](pytest.ini)) | Done |
 
@@ -70,23 +75,28 @@ battery-spo-rl/
 ├── requirements.txt
 ├── data/                    ← cached OPSD CSV (gitignored)
 ├── notebooks/
-│   └── 01_economic_dispatch_toy.ipynb
+│   ├── 01_economic_dispatch_toy.ipynb
+│   └── 02_ieee14_opf_forecast_error.ipynb
 ├── src/
 │   ├── dispatch/
 │   │   ├── economic_dispatch.py
-│   │   └── battery_arbitrage.py
+│   │   ├── battery_arbitrage.py
+│   │   └── ieee14_opf.py           ← pandapower AC OPF + LMP extraction
 │   ├── data/
 │   │   └── opsd_prices.py
 │   ├── forecast/
 │   │   ├── price_forecaster.py       ← LightGBM (legacy baseline)
 │   │   ├── linear_price_forecaster.py ← MAE / SPO linear
+│   │   ├── load_forecaster.py        ← synthetic load scale + OLS
 │   │   └── spo_loss.py               ← SPO+ surrogate + subgradient
 │   └── eval/
 │       ├── regret_backtest.py
+│       ├── opf_scenario.py           ← forecast vs actual OPF CLI
 │       └── __main__.py
 ├── tests/
 │   ├── test_battery_arbitrage.py
-│   └── test_spo_forecaster.py
+│   ├── test_spo_forecaster.py
+│   └── test_ieee14_opf.py
 └── results/
 ```
 
@@ -103,8 +113,8 @@ pip install -r requirements.txt
 # 90-day MAE vs SPO regret backtest
 python -m src.eval --days 90
 
-# Optional LightGBM baseline
-python -m src.eval --days 90 --include-lightgbm
+# IEEE 14-bus AC OPF scenarios (forecast vs actual load)
+python -m src.eval.opf_scenario --hours 24
 
 # Sanity tests
 pytest tests/ -q
@@ -131,7 +141,34 @@ pytest tests/ -q
 | `LinearPriceForecaster(objective='spo')` | MAE init + SPO+ bias subgradient fine-tuning |
 | `spo_epochs`, `learning_rate`, `max_spo_training_days` | SPO tuning knobs |
 
-SPO training: initialize from MAE weights, then run normalized SPO+ subgradient steps on complete training days (default last 20 days, 5 epochs). Predictions clipped to training price range ± margin.
+### IEEE 14-bus OPF — `src/dispatch/ieee14_opf.py`
+
+| Symbol | Purpose |
+|---|---|
+| `load_ieee14_case()` | pandapower `case14()` with stored base loads |
+| `prepare_congestion_case()` | Cap heaviest line to expose binding under peak load |
+| `run_power_flow()` / `run_ac_opf()` | AC PF warm-start then AC OPF |
+| `extract_bus_lmps()` | Bus LMPs from PYPOWER `LAM_P` shadow prices |
+| `extract_line_loadings()` | `res_line.loading_percent` + topology |
+| `solve_opf_at_scale(scale)` | Scale loads, run OPF, return `OpfResult` |
+| `compare_binding_status()` | Hidden congestion: binds in actual, not forecast |
+
+### Load forecaster — `src/forecast/load_forecaster.py`
+
+| Symbol | Purpose |
+|---|---|
+| `build_system_load_profile()` | Synthetic multi-day load scale (Day-1 sinusoid + noise) |
+| `LinearLoadForecaster` | OLS per hour on lag/calendar features |
+| `stress_actual_scales()` | Amplify under-forecast peaks for OPF stress scenarios |
+
+### OPF scenario harness — `src/eval/opf_scenario.py`
+
+| Symbol | Purpose |
+|---|---|
+| `run_opf_scenarios()` | Hourly forecast vs actual OPF loop |
+| `--hours`, `--profile-days`, `--output` | CLI knobs |
+
+CSV `approach` values: `forecast_load`, `actual_load`.
 
 ### Regret harness — `src/eval/regret_backtest.py`
 
@@ -150,7 +187,6 @@ CSV `approach` values: `perfect_foresight`, `mae_linear`, `spo_linear`, optional
 1. RL agent on battery arbitrage (drop if week slips)
 2. Extend capstone CSV with RL rows
 3. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
-4. pandapower AC OPF on IEEE 14-bus (Thursday)
 
 ---
 
@@ -159,3 +195,4 @@ CSV `approach` values: `perfect_foresight`, `mae_linear`, `spo_linear`, optional
 - Remote: `https://github.com/mehmetertac/battery-spo-rl.git`
 - Python venv at `.venv/` (gitignored)
 - 90-day backtest with SPO takes ~15–20 min (LP solve per subgradient step)
+- 24-hour OPF scenario run takes ~1–2 min (48 AC OPF solves)

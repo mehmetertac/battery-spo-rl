@@ -99,6 +99,37 @@ Headline result to look for: **SPO loses on MAE, wins on cumulative regret (EUR)
 pytest tests/ -q
 ```
 
+## Thursday: IEEE 14-bus AC OPF + load forecast error
+
+pandapower AC OPF on the IEEE 14-bus case — connects Day-1 cvxpy duals to **locational** LMPs and line congestion.
+
+1. Load `case14()`, run power flow, then AC OPF with polynomial generator costs
+2. Extract bus LMPs from OPF shadow prices (`LAM_P`) and line `loading_percent`
+3. Scale all bus loads with a synthetic day-ahead **load forecast vs actual** profile (lag + calendar OLS, same feature pattern as price forecasting)
+4. Compare forecast-load OPF vs actual-load OPF — including **hidden congestion** (line binds in actual case but not forecast case)
+
+### Run
+
+```powershell
+# Single-case OPF + LMP CSV
+python -m src.dispatch.ieee14_opf
+
+# 24-hour forecast vs actual scenario backtest (~1–2 min)
+python -m src.eval.opf_scenario --hours 24
+
+# Narrative notebook with plots
+jupyter notebook notebooks/02_ieee14_opf_forecast_error.ipynb
+```
+
+### Output
+
+| File | Description |
+|---|---|
+| `results/ieee14_bus_lmps.csv` | Bus LMPs from baseline OPF |
+| `results/ieee14_line_loadings.csv` | Line loadings from baseline OPF |
+| `results/ieee14_opf_scenarios.csv` | Hourly bus LMPs under `forecast_load` / `actual_load` |
+| `results/ieee14_opf_scenarios_summary.csv` | Hidden congestion flags and LMP spread per hour |
+
 ## Project structure
 
 ```
@@ -106,7 +137,7 @@ battery-spo-rl/
 ├── data/               # Cached OPSD price CSV (gitignored)
 ├── notebooks/          # Exploratory walkthroughs
 ├── src/
-│   ├── dispatch/       # LP modules (economic dispatch, battery arbitrage)
+│   ├── dispatch/       # LP modules + IEEE 14-bus AC OPF (pandapower)
 │   ├── data/           # OPSD price loader
 │   ├── forecast/       # LightGBM + linear MAE/SPO forecasters
 │   └── eval/           # Regret backtest CLI

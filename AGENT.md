@@ -12,10 +12,9 @@ Guidance for agents working in **battery-spo-rl**. Read this file first, then fo
 | [handover.md](handover.md) | Current status, repo layout, module API, week roadmap |
 | [pytest.ini](pytest.ini) | Test discovery (`tests/`, `pythonpath = .`) |
 | [requirements.txt](requirements.txt) | Dependencies |
-| [src/dispatch/](src/dispatch/) | LP modules (economic dispatch, battery arbitrage) |
-| [src/data/](src/data/) | OPSD price loader |
-| [src/forecast/](src/forecast/) | LightGBM point forecaster |
-| [src/eval/](src/eval/) | Regret backtest harness (`python -m src.eval`) |
+| [src/dispatch/](src/dispatch/) | LP modules + IEEE 14-bus AC OPF (pandapower) |
+| [src/forecast/](src/forecast/) | Price + load forecasters, SPO loss |
+| [src/eval/](src/eval/) | Regret backtest + OPF scenario CLI |
 | [tests/](tests/) | Unit tests (synthetic prices; no OPSD in CI) |
 | [notebooks/](notebooks/) | Exploratory walkthroughs |
 
