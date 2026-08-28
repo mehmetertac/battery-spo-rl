@@ -22,6 +22,7 @@ from src.dispatch.battery_arbitrage import (
 )
 from src.forecast.linear_price_forecaster import LinearPriceForecaster
 from src.forecast.price_forecaster import PriceForecaster, build_feature_matrix, forecast_mae
+from src.rl.battery_env import evaluate_rl_day
 
 
 class DayForecaster(Protocol):
@@ -102,6 +103,38 @@ def _evaluate_forecast_day(
     return row, cumulative_regret
 
 
+def _evaluate_rl_day(
+    day: pd.Timestamp,
+    actual: np.ndarray,
+    pf_revenue: float,
+    cumulative_regret: float,
+    model: object,
+    prices: pd.DataFrame,
+    battery_config: BatteryConfig,
+) -> tuple[dict[str, object], float]:
+    """Roll out trained RL policy and return result row."""
+    _schedule, fc_revenue = evaluate_rl_day(
+        model,
+        prices,
+        day,
+        battery_config,
+        deterministic=True,
+    )
+    regret = pf_revenue - fc_revenue
+    cumulative_regret += regret
+
+    row = {
+        "date": day.date().isoformat(),
+        "approach": "rl_ppo",
+        "pf_revenue": pf_revenue,
+        "approach_revenue": fc_revenue,
+        "regret": regret,
+        "cumulative_regret": cumulative_regret,
+        "forecast_mae": np.nan,
+    }
+    return row, cumulative_regret
+
+
 def run_regret_backtest(
     n_days: int = 90,
     start: str | pd.Timestamp | None = None,
@@ -109,6 +142,8 @@ def run_regret_backtest(
     battery_config: BatteryConfig | None = None,
     warmup_days: int = 7,
     include_lightgbm: bool = False,
+    include_rl: bool = False,
+    rl_model_path: str | Path = "models/rl_ppo.zip",
     spo_epochs: int = 5,
     spo_learning_rate: float = 0.01,
 ) -> pd.DataFrame:
@@ -129,7 +164,24 @@ def run_regret_backtest(
             )
 
     rows: list[dict[str, object]] = []
-    cumulative: dict[str, float] = {"mae_linear": 0.0, "spo_linear": 0.0, "point_forecast": 0.0}
+    cumulative: dict[str, float] = {
+        "mae_linear": 0.0,
+        "spo_linear": 0.0,
+        "point_forecast": 0.0,
+        "rl_ppo": 0.0,
+    }
+
+    rl_model = None
+    if include_rl:
+        from stable_baselines3 import PPO
+
+        rl_path = Path(rl_model_path)
+        if not rl_path.exists():
+            raise FileNotFoundError(
+                f"RL model not found at {rl_path}. Train with: python -m src.rl.train"
+            )
+        rl_model = PPO.load(str(rl_path))
+        print(f"Loaded RL model from {rl_path}")
 
     print("Building feature matrix for forecasters...")
     all_features, all_targets, _ = build_feature_matrix(prices)
@@ -171,6 +223,18 @@ def run_regret_backtest(
             battery_config,
         )
         rows.append(row)
+
+        if include_rl and rl_model is not None:
+            row, cumulative["rl_ppo"] = _evaluate_rl_day(
+                day,
+                actual,
+                pf_revenue,
+                cumulative["rl_ppo"],
+                rl_model,
+                prices,
+                battery_config,
+            )
+            rows.append(row)
 
         spo_forecaster = LinearPriceForecaster(
             objective="spo",
@@ -219,6 +283,7 @@ def run_regret_backtest(
 
     for approach, label in [
         ("mae_linear", "MAE linear"),
+        ("rl_ppo", "RL PPO"),
         ("spo_linear", "SPO linear"),
         ("point_forecast", "LightGBM point forecast"),
     ]:
@@ -227,10 +292,11 @@ def run_regret_backtest(
             continue
         total_rev = float(subset["approach_revenue"].sum())
         total_regret = float(subset["regret"].sum())
-        avg_mae = float(subset["forecast_mae"].mean())
+        mae_values = subset["forecast_mae"].dropna()
+        mae_str = f"{float(mae_values.mean()):.2f} EUR/MWh" if not mae_values.empty else "n/a"
         print(
             f"{label:28s} revenue EUR {total_rev:>12,.2f}  "
-            f"cumulative regret EUR {total_regret:>12,.2f}  avg MAE {avg_mae:.2f} EUR/MWh"
+            f"cumulative regret EUR {total_regret:>12,.2f}  avg MAE {mae_str}"
         )
 
     print(f"Saved results to {output_path}")
@@ -272,6 +338,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Also run legacy LightGBM point-forecast baseline.",
     )
     parser.add_argument(
+        "--include-rl",
+        action="store_true",
+        help="Include trained PPO agent (requires --rl-model).",
+    )
+    parser.add_argument(
+        "--rl-model",
+        type=str,
+        default="models/rl_ppo.zip",
+        help="Path to trained SB3 PPO model.",
+    )
+    parser.add_argument(
         "--spo-epochs",
         type=int,
         default=5,
@@ -311,6 +388,8 @@ def main(argv: list[str] | None = None) -> None:
         battery_config=battery,
         warmup_days=args.warmup_days,
         include_lightgbm=args.include_lightgbm,
+        include_rl=args.include_rl,
+        rl_model_path=args.rl_model,
         spo_epochs=args.spo_epochs,
         spo_learning_rate=args.spo_lr,
     )

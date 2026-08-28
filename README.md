@@ -84,7 +84,7 @@ First run downloads OPSD DE-LU day-ahead prices (~120 MB) to `data/opsd/`.
 | Column | Description |
 |---|---|
 | `date` | Evaluation day (Europe/Berlin) |
-| `approach` | `perfect_foresight`, `mae_linear`, or `spo_linear` |
+| `approach` | `perfect_foresight`, `mae_linear`, `spo_linear`, or `rl_ppo` (with `--include-rl`) |
 | `pf_revenue` | Perfect foresight revenue (EUR) |
 | `approach_revenue` | Revenue for this approach (EUR) |
 | `regret` | `pf_revenue - approach_revenue` (0 for perfect foresight) |
@@ -98,6 +98,39 @@ Headline result to look for: **SPO loses on MAE, wins on cumulative regret (EUR)
 ```powershell
 pytest tests/ -q
 ```
+
+## Mid-week: RL agent (Gymnasium + PPO)
+
+Model-free RL primer on the same battery arbitrage problem. The agent acts hourly (charge / hold / discharge) with observations built from SoC, hour-of-day, and causal price lags — same feature pattern as the forecasters.
+
+### Train
+
+```powershell
+# Modest budget (~5 min CPU) — saves to models/rl_ppo.zip (gitignored)
+python -m src.rl.train --timesteps 50000 --output models/rl_ppo.zip
+```
+
+Training uses 60 complete OPSD days immediately before the default 90-day eval window. Requires OPSD cache (see Day 2).
+
+### Evaluate in regret harness
+
+```powershell
+# 90-day capstone with RL as approach rl_ppo
+python -m src.eval --days 90 --include-rl
+
+# Custom model path
+python -m src.eval --days 90 --include-rl --rl-model models/rl_ppo.zip
+```
+
+### RL vs forecast LP (interpret carefully)
+
+| Approach | Pipeline | Information at decision time |
+|---|---|---|
+| MAE / SPO | Forecast 24h → LP → execute on actuals | Day-start forecast only |
+| RL PPO | Sequential policy rollout | History + **realized within-day prices** (lags) |
+| Perfect foresight | Oracle LP on actuals | Full-day actuals |
+
+RL revenue is evaluated with `realized_revenue()` like the LP approaches. See [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md) for the honest capstone read: RL beats forecast LPs here partly because of richer intra-day information, but still trails perfect foresight by ~EUR 267k over 90 days.
 
 ## Thursday: IEEE 14-bus AC OPF + load forecast error
 
@@ -135,11 +168,13 @@ jupyter notebook notebooks/02_ieee14_opf_forecast_error.ipynb
 ```
 battery-spo-rl/
 ├── data/               # Cached OPSD price CSV (gitignored)
+├── models/             # Trained SB3 checkpoints (gitignored)
 ├── notebooks/          # Exploratory walkthroughs
 ├── src/
 │   ├── dispatch/       # LP modules + IEEE 14-bus AC OPF (pandapower)
 │   ├── data/           # OPSD price loader
 │   ├── forecast/       # LightGBM + linear MAE/SPO forecasters
+│   ├── rl/             # Gymnasium env + PPO training
 │   └── eval/           # Regret backtest CLI
 └── results/            # Outputs (figures, CSVs)
 ```

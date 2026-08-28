@@ -1,13 +1,13 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-08-27  
+**Last updated:** 2026-08-28  
 **Branch:** `main`
 
 ### Key commit
 
 ```
-IEEE 14-bus AC OPF with load-forecast scenarios and hidden congestion
+Week 07: Gymnasium battery env, PPO training, rl_ppo in regret capstone
 ```
 
 ---
@@ -19,6 +19,8 @@ Bridge ML and the optimization layer of power systems. The headline metric is **
 This is the most senior-signal artifact of the 12-week master plan. If the week slips, drop RL — never drop SPO.
 
 Agent workflow rules: [AGENT.md](AGENT.md) (includes mandatory handover update before every push).
+
+Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 
 ---
 
@@ -45,6 +47,11 @@ Agent workflow rules: [AGENT.md](AGENT.md) (includes mandatory handover update b
 | **Hidden congestion detection (forecast vs actual load)** | Done |
 | Notebook `02_ieee14_opf_forecast_error.ipynb` | Done |
 | IEEE 14-bus tests (`tests/test_ieee14_opf.py`) | Done |
+| **Gymnasium battery env (`src/rl/battery_env.py`)** | Done |
+| **PPO training CLI (`src/rl/train.py`)** | Done |
+| **Regret harness RL integration (`--include-rl`, `rl_ppo`)** | Done |
+| RL env tests (`tests/test_battery_env.py`) | Done |
+| Week 07 reflection (`WEEK_07_REFLECTION.md`) | Done |
 | Agent workflow rules ([AGENT.md](AGENT.md)) | Done |
 | Test config ([pytest.ini](pytest.ini)) | Done |
 
@@ -52,15 +59,18 @@ Agent workflow rules: [AGENT.md](AGENT.md) (includes mandatory handover update b
 
 ## Headline result (90-day backtest, Jul–Sep 2020)
 
-Run `python -m src.eval --days 90` after OPSD cache is present. Default SPO tuning (`--spo-lr 5 --spo-epochs 5`), Jul–Sep 2020:
+Run `python -m src.eval --days 90 --include-rl` after training (`python -m src.rl.train`). Default SPO tuning (`--spo-lr 5 --spo-epochs 5`), PPO 50k timesteps:
 
 | Approach | Total revenue (EUR) | Cumulative regret (EUR) | Avg MAE (EUR/MWh) |
 |---|---|---|---|
 | Perfect foresight | 876,849 | 0 | — |
 | MAE linear | 113,171 | 763,678 | 9.38 |
+| **RL PPO** | **610,037** | **266,813** | n/a |
 | SPO linear | 122,369 | 754,481 | 9.40 |
 
-**SPO loses on MAE (+0.02 EUR/MWh), wins on dollars (−EUR 9,198 regret, +EUR 9,198 revenue).**
+**SPO loses on MAE (+0.02 EUR/MWh), wins on dollars vs MAE (−EUR 9,198 regret).**
+
+**RL beats forecast LPs but trails perfect foresight** — see [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md) for the information-structure caveat (RL sees intra-day realized prices via lags; forecast LPs commit at day start).
 
 ---
 
@@ -71,9 +81,11 @@ battery-spo-rl/
 ├── README.md
 ├── AGENT.md
 ├── handover.md
+├── WEEK_07_REFLECTION.md
 ├── pytest.ini
 ├── requirements.txt
 ├── data/                    ← cached OPSD CSV (gitignored)
+├── models/                  ← SB3 checkpoints (gitignored)
 ├── notebooks/
 │   ├── 01_economic_dispatch_toy.ipynb
 │   └── 02_ieee14_opf_forecast_error.ipynb
@@ -89,12 +101,16 @@ battery-spo-rl/
 │   │   ├── linear_price_forecaster.py ← MAE / SPO linear
 │   │   ├── load_forecaster.py        ← synthetic load scale + OLS
 │   │   └── spo_loss.py               ← SPO+ surrogate + subgradient
+│   ├── rl/
+│   │   ├── battery_env.py            ← Gymnasium env
+│   │   └── train.py                    ← PPO training CLI
 │   └── eval/
 │       ├── regret_backtest.py
 │       ├── opf_scenario.py           ← forecast vs actual OPF CLI
 │       └── __main__.py
 ├── tests/
 │   ├── test_battery_arbitrage.py
+│   ├── test_battery_env.py
 │   ├── test_spo_forecaster.py
 │   └── test_ieee14_opf.py
 └── results/
@@ -110,7 +126,13 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 90-day MAE vs SPO regret backtest
+# Train PPO agent (~5 min CPU for 50k steps)
+python -m src.rl.train --timesteps 50000
+
+# 90-day capstone: MAE vs SPO vs RL vs perfect foresight
+python -m src.eval --days 90 --include-rl
+
+# 90-day MAE vs SPO only (no RL)
 python -m src.eval --days 90
 
 # IEEE 14-bus AC OPF scenarios (forecast vs actual load)
@@ -140,6 +162,15 @@ pytest tests/ -q
 | `LinearPriceForecaster(objective='mae')` | OLS per hour-of-day on lag/calendar features |
 | `LinearPriceForecaster(objective='spo')` | MAE init + SPO+ bias subgradient fine-tuning |
 | `spo_epochs`, `learning_rate`, `max_spo_training_days` | SPO tuning knobs |
+
+### RL — `src/rl/`
+
+| Symbol | Purpose |
+|---|---|
+| `BatteryArbitrageEnv` | Gymnasium env: discrete charge/hold/discharge, causal lag obs |
+| `evaluate_rl_day()` | Deterministic SB3 rollout → schedule + `realized_revenue()` |
+| `schedule_from_episode()` | Episode log → DataFrame for harness |
+| `python -m src.rl.train` | PPO training; `--timesteps`, `--output`, `--train-days` |
 
 ### IEEE 14-bus OPF — `src/dispatch/ieee14_opf.py`
 
@@ -174,19 +205,20 @@ CSV `approach` values: `forecast_load`, `actual_load`.
 
 | Symbol | Purpose |
 |---|---|
-| `run_regret_backtest()` | Rolling perfect foresight + MAE linear + SPO linear |
+| `run_regret_backtest()` | Rolling perfect foresight + MAE + RL + SPO |
+| `--include-rl`, `--rl-model` | Add trained PPO `rl_ppo` rows |
 | `--include-lightgbm` | Add legacy LightGBM `point_forecast` rows |
 | `--spo-lr`, `--spo-epochs` | SPO+ hyperparameters |
 
-CSV `approach` values: `perfect_foresight`, `mae_linear`, `spo_linear`, optionally `point_forecast`.
+CSV `approach` values: `perfect_foresight`, `mae_linear`, `rl_ppo`, `spo_linear`, optionally `point_forecast`.
 
 ---
 
 ## Suggested next step
 
-1. RL agent on battery arbitrage (drop if week slips)
-2. Extend capstone CSV with RL rows
-3. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
+1. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
+2. Optional: fair RL baseline with day-start-only observations (match day-ahead LP information)
+3. Capstone visualization notebook (regret curves across approaches)
 
 ---
 
@@ -194,5 +226,6 @@ CSV `approach` values: `perfect_foresight`, `mae_linear`, `spo_linear`, optional
 
 - Remote: `https://github.com/mehmetertac/battery-spo-rl.git`
 - Python venv at `.venv/` (gitignored)
-- 90-day backtest with SPO takes ~15–20 min (LP solve per subgradient step)
+- 90-day backtest with SPO + RL takes ~35–45 min (LP per SPO subgradient + PPO rollouts)
+- PPO training 50k steps takes ~5–7 min CPU
 - 24-hour OPF scenario run takes ~1–2 min (48 AC OPF solves)
