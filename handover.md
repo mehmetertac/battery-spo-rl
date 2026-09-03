@@ -1,13 +1,13 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-08-28  
+**Last updated:** 2026-08-30  
 **Branch:** `main`
 
 ### Key commit
 
 ```
-Week 07: Gymnasium battery env, PPO training, rl_ppo in regret capstone
+Capstone showdown: master table, regret plots, regime + battery sensitivity
 ```
 
 ---
@@ -52,6 +52,11 @@ Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 | **Regret harness RL integration (`--include-rl`, `rl_ppo`)** | Done |
 | RL env tests (`tests/test_battery_env.py`) | Done |
 | Week 07 reflection (`WEEK_07_REFLECTION.md`) | Done |
+| **Capstone reporting (`src/eval/capstone*.py`)** | Done |
+| **Master table + regret figures in `results/`** | Done |
+| **Regime robustness (volatile vs calm weeks)** | Done |
+| **Battery sensitivity 3×3 grid (LP-only)** | Done |
+| Capstone tests (`tests/test_capstone_summary.py`) | Done |
 | Agent workflow rules ([AGENT.md](AGENT.md)) | Done |
 | Test config ([pytest.ini](pytest.ini)) | Done |
 
@@ -70,7 +75,22 @@ Run `python -m src.eval --days 90 --include-rl` after training (`python -m src.r
 
 **SPO loses on MAE (+0.02 EUR/MWh), wins on dollars vs MAE (−EUR 9,198 regret).**
 
+**Regime split:** SPO wins on dollars in **volatile** weeks (−EUR 23,711 vs MAE); MAE wins in calm weeks (+EUR 14,514). Headline 90-day total still favors SPO.
+
 **RL beats forecast LPs but trails perfect foresight** — see [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md) for the information-structure caveat (RL sees intra-day realized prices via lags; forecast LPs commit at day start).
+
+### Capstone artifacts (`results/`)
+
+| File | Description |
+|---|---|
+| `regret.csv` | Daily rows for all four approaches |
+| `master_table.csv` | Total revenue, dollar regret, regret % of PF, avg MAE |
+| `regime_robustness.csv` | Aggregates by volatile vs calm ISO weeks |
+| `battery_sensitivity.csv` | 3×3 LP grid (efficiency × energy); SPO vs MAE regret |
+| `cumulative_regret.png` | Money plot — cumulative regret over backtest |
+| `forecast_mae_vs_regret.png` | Scatter: daily MAE vs daily regret |
+| `regime_robustness.png` | Bar chart by market regime |
+| `battery_sensitivity.png` | Heatmap of SPO regret advantage vs MAE |
 
 ---
 
@@ -106,14 +126,18 @@ battery-spo-rl/
 │   │   └── train.py                    ← PPO training CLI
 │   └── eval/
 │       ├── regret_backtest.py
+│       ├── capstone.py               ← four-way orchestrator CLI
+│       ├── capstone_summary.py       ← master table, regime, sensitivity
+│       ├── capstone_figures.py       ← slide-ready plots
 │       ├── opf_scenario.py           ← forecast vs actual OPF CLI
 │       └── __main__.py
 ├── tests/
 │   ├── test_battery_arbitrage.py
 │   ├── test_battery_env.py
+│   ├── test_capstone_summary.py
 │   ├── test_spo_forecaster.py
 │   └── test_ieee14_opf.py
-└── results/
+└── results/                          ← regret CSV, tables, capstone figures
 ```
 
 ---
@@ -129,7 +153,13 @@ pip install -r requirements.txt
 # Train PPO agent (~5 min CPU for 50k steps)
 python -m src.rl.train --timesteps 50000
 
-# 90-day capstone: MAE vs SPO vs RL vs perfect foresight
+# Four-way capstone: backtest + tables + figures (~35–45 min)
+python -m src.eval.capstone --days 90 --include-rl
+
+# Replot from existing regret.csv (skip backtest and sensitivity grid)
+python -m src.eval.capstone --days 90 --skip-backtest --skip-sensitivity
+
+# Backtest only (legacy CLI)
 python -m src.eval --days 90 --include-rl
 
 # 90-day MAE vs SPO only (no RL)
@@ -141,6 +171,8 @@ python -m src.eval.opf_scenario --hours 24
 # Sanity tests
 pytest tests/ -q
 ```
+
+**Note:** Full capstone with 3×3 battery sensitivity adds ~4–6 hours (LP-only reruns). Use `--skip-sensitivity` for faster iteration.
 
 ---
 
@@ -212,13 +244,40 @@ CSV `approach` values: `forecast_load`, `actual_load`.
 
 CSV `approach` values: `perfect_foresight`, `mae_linear`, `rl_ppo`, `spo_linear`, optionally `point_forecast`.
 
+### Capstone orchestrator — `src/eval/capstone.py`
+
+| Symbol / flag | Purpose |
+|---|---|
+| `python -m src.eval.capstone` | Backtest + master table + regime + figures (+ sensitivity grid) |
+| `--include-rl`, `--rl-model` | Add trained PPO to four-way comparison |
+| `--skip-backtest` | Load existing `results/regret.csv` |
+| `--skip-sensitivity` | Skip 3×3 battery grid (~4–6 hours) |
+| `--results-dir` | Output directory (default `results/`) |
+
+### Capstone summary — `src/eval/capstone_summary.py`
+
+| Symbol | Purpose |
+|---|---|
+| `build_master_table()` | Total revenue, regret, regret % of PF, avg MAE |
+| `build_regime_robustness()` | Volatile vs calm week aggregates |
+| `run_battery_sensitivity_grid()` | LP-only 3×3 efficiency × energy reruns |
+
+### Capstone figures — `src/eval/capstone_figures.py`
+
+| Symbol | Purpose |
+|---|---|
+| `plot_cumulative_regret()` | Money plot — all four approaches |
+| `plot_forecast_mae_vs_regret()` | Accuracy ≠ decision quality scatter |
+| `plot_regime_robustness()` | Regime bar chart |
+| `plot_battery_sensitivity()` | SPO advantage heatmap |
+
 ---
 
 ## Suggested next step
 
 1. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
 2. Optional: fair RL baseline with day-start-only observations (match day-ahead LP information)
-3. Capstone visualization notebook (regret curves across approaches)
+3. Optional: capstone narrative notebook wrapping `src/eval/capstone.py` outputs
 
 ---
 
@@ -226,6 +285,7 @@ CSV `approach` values: `perfect_foresight`, `mae_linear`, `rl_ppo`, `spo_linear`
 
 - Remote: `https://github.com/mehmetertac/battery-spo-rl.git`
 - Python venv at `.venv/` (gitignored)
-- 90-day backtest with SPO + RL takes ~35–45 min (LP per SPO subgradient + PPO rollouts)
+- 90-day capstone with SPO + RL takes ~35–45 min (LP per SPO subgradient + PPO rollouts)
+- Full capstone + 3×3 battery sensitivity takes ~4–6 hours additional (LP-only reruns)
 - PPO training 50k steps takes ~5–7 min CPU
 - 24-hour OPF scenario run takes ~1–2 min (48 AC OPF solves)

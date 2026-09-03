@@ -138,7 +138,7 @@ def _evaluate_rl_day(
 def run_regret_backtest(
     n_days: int = 90,
     start: str | pd.Timestamp | None = None,
-    output_path: str | Path = "results/regret.csv",
+    output_path: str | Path | None = "results/regret.csv",
     battery_config: BatteryConfig | None = None,
     warmup_days: int = 7,
     include_lightgbm: bool = False,
@@ -146,12 +146,17 @@ def run_regret_backtest(
     rl_model_path: str | Path = "models/rl_ppo.zip",
     spo_epochs: int = 5,
     spo_learning_rate: float = 0.01,
+    prices: pd.DataFrame | None = None,
+    precomputed_features: pd.DataFrame | None = None,
+    precomputed_targets: pd.Series | None = None,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Run day-by-day regret backtest and write results CSV."""
     if battery_config is None:
         battery_config = BatteryConfig()
 
-    prices = load_de_day_ahead()
+    if prices is None:
+        prices = load_de_day_ahead()
     if start is None:
         eval_days = _default_eval_days(prices, n_days, warmup_days)
     else:
@@ -181,13 +186,19 @@ def run_regret_backtest(
                 f"RL model not found at {rl_path}. Train with: python -m src.rl.train"
             )
         rl_model = PPO.load(str(rl_path))
-        print(f"Loaded RL model from {rl_path}")
+        if verbose:
+            print(f"Loaded RL model from {rl_path}")
 
-    print("Building feature matrix for forecasters...")
-    all_features, all_targets, _ = build_feature_matrix(prices)
+    if precomputed_features is None or precomputed_targets is None:
+        if verbose:
+            print("Building feature matrix for forecasters...")
+        all_features, all_targets, _ = build_feature_matrix(prices)
+    else:
+        all_features = precomputed_features
+        all_targets = precomputed_targets
 
     for day_idx, day in enumerate(eval_days, start=1):
-        if day_idx == 1 or day_idx % 10 == 0 or day_idx == len(eval_days):
+        if verbose and (day_idx == 1 or day_idx % 10 == 0 or day_idx == len(eval_days)):
             print(f"Backtest day {day_idx}/{len(eval_days)}: {day.date()}", flush=True)
 
         actual = extract_day_prices(prices, day).to_numpy(dtype=float)
@@ -273,33 +284,37 @@ def run_regret_backtest(
             rows.append(row)
 
     results = pd.DataFrame(rows)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    results.to_csv(output_path, index=False)
+    if output_path is not None:
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        results.to_csv(out, index=False)
 
     pf_total = float(results.loc[results["approach"] == "perfect_foresight", "pf_revenue"].sum())
-    print(f"Evaluation days: {len(eval_days)} ({eval_days[0].date()} to {eval_days[-1].date()})")
-    print(f"Perfect foresight total revenue: EUR {pf_total:,.2f}")
+    if verbose:
+        print(f"Evaluation days: {len(eval_days)} ({eval_days[0].date()} to {eval_days[-1].date()})")
+        print(f"Perfect foresight total revenue: EUR {pf_total:,.2f}")
 
-    for approach, label in [
-        ("mae_linear", "MAE linear"),
-        ("rl_ppo", "RL PPO"),
-        ("spo_linear", "SPO linear"),
-        ("point_forecast", "LightGBM point forecast"),
-    ]:
-        subset = results.loc[results["approach"] == approach]
-        if subset.empty:
-            continue
-        total_rev = float(subset["approach_revenue"].sum())
-        total_regret = float(subset["regret"].sum())
-        mae_values = subset["forecast_mae"].dropna()
-        mae_str = f"{float(mae_values.mean()):.2f} EUR/MWh" if not mae_values.empty else "n/a"
-        print(
-            f"{label:28s} revenue EUR {total_rev:>12,.2f}  "
-            f"cumulative regret EUR {total_regret:>12,.2f}  avg MAE {mae_str}"
-        )
+        for approach, label in [
+            ("mae_linear", "MAE linear"),
+            ("rl_ppo", "RL PPO"),
+            ("spo_linear", "SPO linear"),
+            ("point_forecast", "LightGBM point forecast"),
+        ]:
+            subset = results.loc[results["approach"] == approach]
+            if subset.empty:
+                continue
+            total_rev = float(subset["approach_revenue"].sum())
+            total_regret = float(subset["regret"].sum())
+            mae_values = subset["forecast_mae"].dropna()
+            mae_str = f"{float(mae_values.mean()):.2f} EUR/MWh" if not mae_values.empty else "n/a"
+            print(
+                f"{label:28s} revenue EUR {total_rev:>12,.2f}  "
+                f"cumulative regret EUR {total_regret:>12,.2f}  avg MAE {mae_str}"
+            )
 
-    print(f"Saved results to {output_path}")
+    if output_path is not None:
+        if verbose:
+            print(f"Saved results to {output_path}")
     return results
 
 

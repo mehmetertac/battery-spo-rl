@@ -132,6 +132,46 @@ python -m src.eval --days 90 --include-rl --rl-model models/rl_ppo.zip
 
 RL revenue is evaluated with `realized_revenue()` like the LP approaches. See [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md) for the honest capstone read: RL beats forecast LPs here partly because of richer intra-day information, but still trails perfect foresight by ~EUR 267k over 90 days.
 
+## Capstone: four-way showdown
+
+Compare all four approaches on the same 90-day backtest (Jul–Sep 2020):
+
+1. **LP + perfect foresight** — oracle upper bound
+2. **LP + MAE forecast** — OLS on lag/calendar features
+3. **RL agent (PPO)** — sequential policy with intra-day price lags
+4. **LP + SPO forecast** — MAE init + SPO+ bias fine-tuning
+
+### Run
+
+```powershell
+# Train RL agent first (~5 min)
+python -m src.rl.train --timesteps 50000 --output models/rl_ppo.zip
+
+# Full capstone: backtest + master table + regime + figures (~35–45 min)
+python -m src.eval.capstone --days 90 --include-rl
+
+# Skip 3×3 battery sensitivity grid (saves ~4–6 hours)
+python -m src.eval.capstone --days 90 --include-rl --skip-sensitivity
+
+# Replot from existing results/regret.csv
+python -m src.eval.capstone --skip-backtest --skip-sensitivity
+```
+
+### Output: `results/`
+
+| File | Description |
+|---|---|
+| `regret.csv` | Daily rows for all four approaches |
+| `master_table.csv` | Total revenue, dollar regret, regret % of perfect foresight, avg MAE |
+| `regime_robustness.csv` | Volatile vs calm week aggregates |
+| `battery_sensitivity.csv` | 3×3 LP grid (efficiency × energy capacity) |
+| `cumulative_regret.png` | **Money plot** — cumulative regret over backtest |
+| `forecast_mae_vs_regret.png` | Daily forecast MAE vs daily regret scatter |
+| `regime_robustness.png` | Regret by market regime |
+| `battery_sensitivity.png` | SPO regret advantage heatmap |
+
+Headline result: **SPO loses on MAE, wins on cumulative regret (EUR) vs MAE.** The scatter plot shows forecast accuracy and decision quality are weakly coupled — SPO's curve dips below MAE's on the money plot despite worse average MAE.
+
 ## Thursday: IEEE 14-bus AC OPF + load forecast error
 
 pandapower AC OPF on the IEEE 14-bus case — connects Day-1 cvxpy duals to **locational** LMPs and line congestion.
@@ -175,7 +215,7 @@ battery-spo-rl/
 │   ├── data/           # OPSD price loader
 │   ├── forecast/       # LightGBM + linear MAE/SPO forecasters
 │   ├── rl/             # Gymnasium env + PPO training
-│   └── eval/           # Regret backtest CLI
+│   └── eval/           # Regret backtest + capstone reporting CLI
 └── results/            # Outputs (figures, CSVs)
 ```
 
