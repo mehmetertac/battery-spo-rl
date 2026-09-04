@@ -15,6 +15,7 @@ from src.dispatch.ieee14_opf import (
     prepare_congestion_case,
     solve_opf_at_scale,
 )
+from src.eval.opf_figures import generate_opf_figures
 from src.forecast.load_forecaster import (
     build_system_load_profile,
     forecast_vs_actual_scales,
@@ -157,6 +158,11 @@ def main(argv: list[str] | None = None) -> None:
         help="Output CSV path for bus-level results",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--save-figures",
+        action="store_true",
+        help="Also write ieee14_lmp.png and ieee14_scenario_comparison.png",
+    )
     args = parser.parse_args(argv)
 
     print(f"Running OPF scenarios for {args.hours} hours...")
@@ -176,6 +182,13 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Saved line results to {args.output.with_name(args.output.stem + '_lines.csv')}")
     print(f"Saved summary to {args.output.with_name(args.output.stem + '_summary.csv')}")
     print(f"Hidden congestion events (line-hour): {n_hidden}")
+
+    if args.save_figures:
+        generate_opf_figures(
+            results_dir=args.output.parent,
+            profile_days=args.profile_days,
+            seed=args.seed,
+        )
 
 
 if __name__ == "__main__":

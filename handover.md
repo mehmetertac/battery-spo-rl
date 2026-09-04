@@ -1,13 +1,13 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-08-30  
+**Last updated:** 2026-09-04  
 **Branch:** `main`
 
 ### Key commit
 
 ```
-Capstone showdown: master table, regret plots, regime + battery sensitivity
+README finalization: narrative-first landing page, docs/figures, Week 12 seed post
 ```
 
 ---
@@ -34,6 +34,10 @@ Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 | LMP verification (dual = marginal generator cost) | Done — 24/24 hours pass |
 | Walkthrough notebook with plots | Done |
 | README with LP/MILP mental model and dispatch framing | Done |
+| **README finalization (narrative-first, pipeline diagram, embedded figures)** | Done |
+| **Public write-up (`docs/mae-lost-money.md`, Week 12 article seed)** | Done |
+| **Committed capstone + OPF figures (`docs/figures/`)** | Done |
+| **OPF figure CLI (`src/eval/opf_figures.py`, `--save-figures`)** | Done |
 | Battery arbitrage LP (`src/dispatch/battery_arbitrage.py`) | Done |
 | OPSD DE-LU day-ahead price loader | Done |
 | LightGBM point forecaster (lags + calendar) | Done |
@@ -92,6 +96,16 @@ Run `python -m src.eval --days 90 --include-rl` after training (`python -m src.r
 | `regime_robustness.png` | Bar chart by market regime |
 | `battery_sensitivity.png` | Heatmap of SPO regret advantage vs MAE |
 
+### Public artifacts (`docs/`)
+
+| File | Description |
+|---|---|
+| `docs/figures/cumulative_regret.png` | Money plot (committed for GitHub README) |
+| `docs/figures/forecast_mae_vs_regret.png` | MAE vs regret scatter |
+| `docs/figures/ieee14_lmp.png` | Baseline bus LMPs + line loadings |
+| `docs/figures/ieee14_scenario_comparison.png` | LMP shift + hidden congestion |
+| `docs/mae-lost-money.md` | Short public post — Week 12 long-form seed |
+
 ---
 
 ## Repo layout
@@ -102,6 +116,9 @@ battery-spo-rl/
 ├── AGENT.md
 ├── handover.md
 ├── WEEK_07_REFLECTION.md
+├── docs/
+│   ├── figures/             ← committed capstone + OPF PNGs (GitHub-rendered)
+│   └── mae-lost-money.md    ← Week 12 article seed
 ├── pytest.ini
 ├── requirements.txt
 ├── data/                    ← cached OPSD CSV (gitignored)
@@ -129,6 +146,7 @@ battery-spo-rl/
 │       ├── capstone.py               ← four-way orchestrator CLI
 │       ├── capstone_summary.py       ← master table, regime, sensitivity
 │       ├── capstone_figures.py       ← slide-ready plots
+│       ├── opf_figures.py            ← IEEE 14-bus OPF PNG CLI
 │       ├── opf_scenario.py           ← forecast vs actual OPF CLI
 │       └── __main__.py
 ├── tests/
@@ -167,6 +185,9 @@ python -m src.eval --days 90
 
 # IEEE 14-bus AC OPF scenarios (forecast vs actual load)
 python -m src.eval.opf_scenario --hours 24
+
+# OPF figures only (~1 min, no OPSD)
+python -m src.eval.opf_scenario --hours 24 --save-figures
 
 # Sanity tests
 pytest tests/ -q
@@ -230,8 +251,17 @@ pytest tests/ -q
 |---|---|
 | `run_opf_scenarios()` | Hourly forecast vs actual OPF loop |
 | `--hours`, `--profile-days`, `--output` | CLI knobs |
+| `--save-figures` | Write `ieee14_lmp.png` + `ieee14_scenario_comparison.png` |
 
 CSV `approach` values: `forecast_load`, `actual_load`.
+
+### OPF figures — `src/eval/opf_figures.py`
+
+| Symbol | Purpose |
+|---|---|
+| `plot_baseline_opf()` | Bus LMPs + top line loadings at unit scale |
+| `plot_forecast_vs_actual()` | LMP shift + hidden congestion at peak hour |
+| `generate_opf_figures()` | Write both PNGs to a results directory |
 
 ### Regret harness — `src/eval/regret_backtest.py`
 
@@ -275,9 +305,9 @@ CSV `approach` values: `perfect_foresight`, `mae_linear`, `rl_ppo`, `spo_linear`
 
 ## Suggested next step
 
-1. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
-2. Optional: fair RL baseline with day-start-only observations (match day-ahead LP information)
-3. Optional: capstone narrative notebook wrapping `src/eval/capstone.py` outputs
+1. **Week 12 long-form article** — expand [docs/mae-lost-money.md](docs/mae-lost-money.md) (SPO+ theory, MAE–regret decoupling, regime robustness, OPF congestion)
+2. Optional: cvxpylayers end-to-end gradient (PyTorch) for stronger SPO gains
+3. Optional: fair RL baseline with day-start-only observations (match day-ahead LP information)
 
 ---
 

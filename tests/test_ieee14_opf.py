@@ -16,6 +16,7 @@ from src.dispatch.ieee14_opf import (
     run_power_flow,
     solve_opf_at_scale,
 )
+from src.eval.opf_figures import generate_opf_figures
 from src.eval.opf_scenario import run_opf_scenarios
 from src.forecast.load_forecaster import (
     build_system_load_profile,
@@ -90,6 +91,12 @@ def test_opf_scenario_smoke_two_hours() -> None:
     assert set(df["approach"]) == {"forecast_load", "actual_load"}
     summary = df.attrs["summary"]
     assert len(summary) == 2
+
+
+def test_opf_figures_write_png(tmp_path) -> None:
+    lmp_path, scenario_path = generate_opf_figures(tmp_path, profile_days=30, seed=42)
+    assert lmp_path.exists() and lmp_path.stat().st_size > 0
+    assert scenario_path.exists() and scenario_path.stat().st_size > 0
 
 
 def test_compare_binding_status_columns() -> None:
