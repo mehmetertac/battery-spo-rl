@@ -6,7 +6,7 @@
 
 ### Key commit
 
-`31955de` — README polish: badges, CI, pyproject.toml, limitations, market terms, article placeholder.
+`acf6c3b` — README polish: badges, CI, pyproject.toml, limitations, market terms, article placeholder.
 
 ---
 
