@@ -1,14 +1,12 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-09-04  
+**Last updated:** 2026-11-04  
 **Branch:** `main`
 
 ### Key commit
 
-```
-README finalization: narrative-first landing page, docs/figures, Week 12 seed post
-```
+`31955de` — README polish: badges, CI, pyproject.toml, limitations, market terms, article placeholder.
 
 ---
 
@@ -35,6 +33,7 @@ Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 | Walkthrough notebook with plots | Done |
 | README with LP/MILP mental model and dispatch framing | Done |
 | **README finalization (narrative-first, pipeline diagram, embedded figures)** | Done |
+| **Week 12 README polish** — badges, CI workflow, `pyproject.toml` (`pip install -e .`), limitations, market terms, article placeholder | Done |
 | **Public write-up (`docs/mae-lost-money.md`, Week 12 article seed)** | Done |
 | **Committed capstone + OPF figures (`docs/figures/`)** | Done |
 | **OPF figure CLI (`src/eval/opf_figures.py`, `--save-figures`)** | Done |

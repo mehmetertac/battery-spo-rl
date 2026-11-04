@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "battery-spo-rl"
+version = "0.1.0"
+description = "Battery arbitrage LP with MAE vs SPO+ forecasters — regret in dollars, not MAE"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "cvxpy>=1.4",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+    "numpy>=1.26,<2",
+    "lightgbm>=4.0",
+    "scikit-learn>=1.4",
+    "stable-baselines3>=2.3",
+    "gymnasium>=0.29",
+    "pandapower>=2.14",
+    "jupyter>=1.0",
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
