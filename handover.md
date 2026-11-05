@@ -1,12 +1,12 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-11-04  
+**Last updated:** 2026-11-05  
 **Branch:** `main`
 
 ### Key commit
 
-`acf6c3b` — README polish: badges, CI, pyproject.toml, limitations, market terms, article placeholder.
+Portfolio polish — `CHANGELOG.md`, regret demo GIF, release **v1.0.0** (pending push).
 
 ---
 
@@ -62,6 +62,8 @@ Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 | Capstone tests (`tests/test_capstone_summary.py`) | Done |
 | Agent workflow rules ([AGENT.md](AGENT.md)) | Done |
 | Test config ([pytest.ini](pytest.ini)) | Done |
+| **`CHANGELOG.md`** + `docs/figures/cumulative_regret.gif` demo | Done |
+| GitHub release **`v1.0.0`** | Pending push |
 
 ---
 

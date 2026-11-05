@@ -65,7 +65,9 @@ RL PPO beats both forecast LPs but uses **intra-day realized price lags** — a 
 
 ## The money plot
 
-![Cumulative regret vs perfect foresight](docs/figures/cumulative_regret.png)
+![Cumulative regret vs perfect foresight (animated backtest)](docs/figures/cumulative_regret.gif)
+
+Static figure: [docs/figures/cumulative_regret.png](docs/figures/cumulative_regret.png). Regenerate GIF: `python scripts/build_regret_demo_gif.py` (requires `results/regret.csv`).
 
 SPO's cumulative regret curve sits below MAE's for most of the backtest despite slightly worse average forecast accuracy. The scatter plot makes the decoupling explicit:
 
