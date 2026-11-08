@@ -13,7 +13,7 @@ Forecast accuracy is not the scoreboard. **Decision regret in dollars vs perfect
 
 → [Short write-up: why decision-focused learning matters in energy markets](docs/mae-lost-money.md)
 
-**Long-form article (placeholder):** *Why decision-focused learning beats accuracy-focused learning in energy markets* — link pending Saturday.
+**Long-form article:** [*Why decision-focused learning beats accuracy-focused learning in energy markets*](docs/decision-focused-learning.md)
 
 ---
 
