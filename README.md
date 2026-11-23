@@ -1,7 +1,7 @@
 # battery-spo-rl
 
 [![ci](https://github.com/mehmetertac/battery-spo-rl/actions/workflows/ci.yml/badge.svg)](https://github.com/mehmetertac/battery-spo-rl/actions/workflows/ci.yml)
-![Python >=3.11](https://img.shields.io/badge/python-%3E%3D3.11-blue)
+![Python 3.11–3.12](https://img.shields.io/badge/python-3.11--3.12-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 [![Release](https://img.shields.io/github/v/release/mehmetertac/battery-spo-rl)](https://github.com/mehmetertac/battery-spo-rl/releases)
 
@@ -107,13 +107,35 @@ A load forecast acceptable on MAE can still shift bus LMPs and hide binding tran
 
 ## Reproduce
 
+**Python 3.11 or 3.12 only** (`requires-python = ">=3.11,<3.13"`). Third-party deps install from [requirements.lock](requirements.lock) (hashed pins). Use **wheels only** (`--only-binary=:all:`); the local package is installed editable in a second step (`-e . --no-deps`).
+
 ```powershell
 git clone https://github.com/mehmetertac/battery-spo-rl.git
 cd battery-spo-rl
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .
+python -m pip install --upgrade pip
+pip install --only-binary=:all: --require-hashes -r requirements.lock
+pip install -e . --no-deps
+```
 
+```bash
+# Linux / macOS
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install --only-binary=:all: --require-hashes -r requirements.lock
+pip install -e . --no-deps
+```
+
+Regenerate the lock after changing deps in `pyproject.toml`:
+
+```powershell
+python -m pip install pip-tools
+pip-compile --generate-hashes --resolver=backtracking --allow-unsafe -o requirements.lock pyproject.toml
+```
+
+```powershell
 # Sanity tests (synthetic data, no OPSD download)
 pytest tests/ -q
 

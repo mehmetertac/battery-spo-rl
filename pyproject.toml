@@ -7,9 +7,10 @@ name = "battery-spo-rl"
 version = "0.1.0"
 description = "Battery arbitrage LP with MAE vs SPO+ forecasters — regret in dollars, not MAE"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 license = { text = "Apache-2.0" }
 dependencies = [
+    "setuptools>=68",
     "cvxpy>=1.4",
     "pandas>=2.0",
     "matplotlib>=3.8",

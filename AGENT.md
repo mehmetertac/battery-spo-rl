@@ -11,7 +11,8 @@ Guidance for agents working in **battery-spo-rl**. Read this file first, then fo
 | [README.md](README.md) | Project goal, setup, Day 1/Day 2 run commands, regret metric |
 | [handover.md](handover.md) | Current status, repo layout, module API, week roadmap |
 | [pytest.ini](pytest.ini) | Test discovery (`tests/`, `pythonpath = .`) |
-| [requirements.txt](requirements.txt) | Dependencies |
+| [requirements.txt](requirements.txt) | Dependency ranges (reference) |
+| [requirements.lock](requirements.lock) | Hashed pins for reproducible `pip install` |
 | [src/dispatch/](src/dispatch/) | LP modules + IEEE 14-bus AC OPF (pandapower) |
 | [src/forecast/](src/forecast/) | Price + load forecasters, SPO loss |
 | [src/eval/](src/eval/) | Regret backtest + OPF scenario CLI |

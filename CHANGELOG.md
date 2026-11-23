@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `requirements.lock` — hashed dependency pins (`pip-compile --generate-hashes --allow-unsafe` pins `setuptools` for `--require-hashes` installs).
+- CI **reproducibility** job: clean clone on `ubuntu-latest` and `windows-latest`, wheels-only locked install, `tests/test_install_smoke.py`.
+- README wheels-only install docs; `requires-python = ">=3.11,<3.13"`.
+
+### Changed
+
+- Unit-test CI installs from `requirements.lock` instead of floating `pip install -e .`.
+- `requirements.txt` aligned with `pyproject.toml` (`numpy<2`); comment points to lockfile.
+
 ## [1.0.0] - 2026-11-05
 
 ### Added

@@ -14,10 +14,49 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: requirements.lock
 
-      - name: Install package
-        run: pip install -e .
+      - name: Install dependencies (locked, wheels only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --only-binary=:all: --require-hashes -r requirements.lock
+          pip install -e . --no-deps
 
       - name: Unit tests
         run: pytest tests/ -q
+
+  reproducibility:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create venv and install (locked, wheels only)
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            . .venv/Scripts/activate
+          else
+            . .venv/bin/activate
+          fi
+          python -m pip install --upgrade pip
+          pip install --only-binary=:all: --require-hashes -r requirements.lock
+          pip install -e . --no-deps
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            . .venv/Scripts/activate
+          else
+            . .venv/bin/activate
+          fi
+          python -m pytest tests/test_install_smoke.py -q

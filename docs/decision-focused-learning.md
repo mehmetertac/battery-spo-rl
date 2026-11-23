@@ -98,7 +98,7 @@ Treat this repo as a teaching artifact, not an EMS product.
 Reproduce the table and figures:
 
 ```powershell
-pip install -e .
+# Wheels-only install: see README "Reproduce" (requirements.lock + pip install -e . --no-deps)
 python -m src.eval.capstone --days 90 --include-rl --skip-sensitivity
 ```
 

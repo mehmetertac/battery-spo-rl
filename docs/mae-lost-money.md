@@ -54,7 +54,7 @@ The RL agent beats both forecast LPs on cumulative regret — but it sees **intr
 ## Reproduce it
 
 ```powershell
-pip install -r requirements.txt
+# Wheels-only install: see README "Reproduce" (requirements.lock + pip install -e . --no-deps)
 python -m src.rl.train --timesteps 50000
 python -m src.eval.capstone --days 90 --include-rl --skip-sensitivity
 ```

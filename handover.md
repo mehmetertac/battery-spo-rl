@@ -1,12 +1,12 @@
 # Handover — battery-spo-rl
 
 **Repo:** https://github.com/mehmetertac/battery-spo-rl  
-**Last updated:** 2026-11-05  
+**Last updated:** 2026-11-23  
 **Branch:** `main`
 
 ### Key commit
 
-Portfolio polish — `CHANGELOG.md`, regret demo GIF, release **v1.0.0** (pending push).
+Reproducibility sweep — `requirements.lock`, `requires-python <3.13`, wheels-only install, CI on Windows + Ubuntu.
 
 ---
 
@@ -64,6 +64,9 @@ Week 07 reflection: [WEEK_07_REFLECTION.md](WEEK_07_REFLECTION.md)
 | Test config ([pytest.ini](pytest.ini)) | Done |
 | **`CHANGELOG.md`** + `docs/figures/cumulative_regret.gif` demo | Done |
 | GitHub release **`v1.0.0`** | Pending push |
+| **`requirements.lock`** + wheels-only install docs; `requires-python <3.13` | Done |
+| CI reproducibility job (Windows + Ubuntu clean clone + smoke test) | Done |
+| `tests/test_install_smoke.py` | Done |
 
 ---
 
@@ -122,6 +125,7 @@ battery-spo-rl/
 │   └── mae-lost-money.md    ← Week 12 article seed
 ├── pytest.ini
 ├── requirements.txt
+├── requirements.lock       ← hashed pins (pip-compile)
 ├── data/                    ← cached OPSD CSV (gitignored)
 ├── models/                  ← SB3 checkpoints (gitignored)
 ├── notebooks/
@@ -167,7 +171,12 @@ battery-spo-rl/
 cd battery-spo-rl
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install --only-binary=:all: --require-hashes -r requirements.lock
+pip install -e . --no-deps
+
+# Post-install smoke (same as CI reproducibility job)
+pytest tests/test_install_smoke.py -q
 
 # Train PPO agent (~5 min CPU for 50k steps)
 python -m src.rl.train --timesteps 50000
